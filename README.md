@@ -55,35 +55,34 @@ This project analyzes a comprehensive Credit Risk dataset using SQL to evaluate 
 
 ```sql
 /* ====================================================================
-Q10: EXPOSURE RANKING BY LOAN INTENT (COMPRESSED SUMMARY VIEW)
-Objective: Identify the top highest exposure tiers and borrower density.
+Question 10: High-Exposure Concentration Ranking:
+Use SQL Window Functions (DENSE_RANK()) to identify and rank the top 10 highest-exposure borrowers within each specific loan intent category.
 ==================================================================== */
 
-WITH RankedLoansByIntent AS (
-    SELECT 
-        loan_intent,  
-        loan_amnt,
-        DENSE_RANK() OVER( 
-            PARTITION BY loan_intent 
-            ORDER BY loan_amnt DESC 
-        ) AS loan_rank
-    FROM 
-        view_cleaned_loan_data
+-- Create CTE to rank loan amounts within each loan category
+WITH Ranked_Loans AS 
+(
+SELECT loan_intent,  
+       loan_amnt,
+       DENSE_RANK() OVER( 
+           PARTITION BY loan_intent 
+           ORDER BY loan_amnt DESC 
+       ) AS Loan_intent_Rankes
+FROM view_cleaned_loan_data
 )
+-- Select top 10 ranks and count how many borrowers are tied at each amount
+SELECT loan_intent, 
+       loan_amnt, 
+       Loan_intent_Rankes,
+       COUNT(*) AS Total_Borrowers -- Number of borrowers clustered at this loan size
+FROM Ranked_Loans
+WHERE Loan_intent_Rankes <= 10 
+GROUP BY loan_intent, loan_amnt, Loan_intent_Rankes
+ORDER BY loan_intent, Loan_intent_Rankes;
 
-SELECT 
-    loan_intent, 
-    loan_amnt, 
-    loan_rank,
-    COUNT(*) AS total_borrowers
-FROM 
-    RankedLoansByIntent
-WHERE 
-    loan_rank <= 10
-GROUP BY 
-    loan_intent, 
-    loan_amnt, 
-    loan_rank
-ORDER BY 
-    loan_intent, 
-    loan_rank;
+-- Key Insights: High-Exposure Concentration Ranking
+
+-- Underwriting Policy Ceiling: The window analysis reveals a strict policy cap across almost all categories—the highest loan amount (Rank 1) is universally fixed at exactly $35,000.
+-- High-Density Tied Tiers: Rank 1 does not hold a single borrower; instead, it contains a massive cluster of separate borrowers all tied exactly at the $35,000 limit, particularly in Debt Consolidation and Medical categories.
+-- Portfolio Concentration Risk: This heavy clustering at the absolute maximum limit exposes the bank to systemic boundary risk, showing that capital is heavily bunched together right at the underwriting ceiling.
+ 
