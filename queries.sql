@@ -28,28 +28,19 @@ WHERE person_emp_exp > 75 ;
 SELECT 
     -- 1. AGE ANOMALY COUNTER
     -- Flags rows where the applicant's age is structurally impossible (> 100).
-    SUM(CASE 
-        WHEN person_age > 100 THEN 1
-        ELSE 0
-    END) AS AGE_ERROR,
+    SUM(CASE WHEN person_age > 100 THEN 1 ELSE 0 END) AS AGE_ERROR,
 
     -- 2. EMPLOYMENT EXPERIENCE ANOMALY COUNTER
     -- Flags rows where the recorded years of employment exceed a working lifetime (> 75).
-    SUM(CASE 
-        WHEN person_emp_exp > 75 THEN 1
-        ELSE 0
-    END) AS EXP_ERROR,
+    SUM(CASE  WHEN person_emp_exp > 75 THEN 1 ELSE 0 END) AS EXP_ERROR,
 
     -- 3. MISSING INTEREST RATE COUNTER
     -- Identifies and counts records where the crucial pricing metric (interest rate) is completely blank.
-    SUM(CASE 
-        WHEN loan_int_rate IS NULL THEN 1
-        ELSE 0
-    END) AS NULL_VALUE
-
+    SUM(CASE WHEN loan_int_rate IS NULL THEN 1 ELSE 0 END) AS NULL_VALUE
 FROM 
     loan_data;
 
+=================================================================================================================================================================================================================
 -- QUESTION 2: HIGH-RISK DATA EXCLUSION EXPOSURE:
 -- Calculate the total funded capital (loan_amnt) locked inside anomalous or incomplete rows 
 -- to show stakeholders the exact financial footprint of our dirty data.
@@ -76,7 +67,8 @@ CASE
 		ELSE 0 
 END) AS TOTAL_AMOUNT 
 FROM loan_data;
-            
+
+=================================================================================================================================================================================================================          
 -- Question 3: Clean Portfolio Baseline KPIs :
 -- Isolate the healthy data and establish the foundational metrics: 
 -- total clean loan count, total capital deployed, average interest rate, and average borrower age.  
@@ -122,7 +114,8 @@ WHERE
     (person_emp_exp <= 75 AND person_emp_exp IS NOT NULL)
     AND 
     (loan_int_rate IS NOT NULL);
-      
+
+=================================================================================================================================================================================================================      
 -- Question 4: Age-Bracket Capital Distribution: Group borrowers into 
 -- demographic tiers (e.g. Young Adults(18-25), Prime Adults(26-49), Mature Adults(50-64), Seniors(above 65) )
 -- to determine which age segment commands the highest volume of credit capital.
@@ -140,7 +133,7 @@ FROM view_cleaned_loan_data;
 
 -- The Answer
 -- Calculate total, active, and defaulted capital per age group
-WITH Portfolia_data AS (
+WITH Portfolio_data AS (
 SELECT 
 (CASE
     WHEN person_age BETWEEN 18 AND 25 THEN 'Young Adults'
@@ -154,7 +147,6 @@ SUM(CASE WHEN loan_status = 0 THEN loan_amnt ELSE 0 END) AS Active_portfolio,   
 SUM(CASE WHEN loan_status = 1 THEN loan_amnt ELSE 0 END) AS Defaulted_portfolio   -- Sum of defaulted loans
 FROM view_cleaned_loan_data 
 GROUP BY Age_Category 
-ORDER BY Total_Credit_Capital DESC 
 )
 -- Calculate final portfolio shares and percentages
 SELECT Age_Category, 
@@ -163,7 +155,8 @@ SELECT Age_Category,
        ROUND((Active_Portfolio / Total_Credit_Capital) * 100, 2) AS Active_Portfolio_Percentage,  -- Share of healthy loans
        Defaulted_Portfolio,
        ROUND((Defaulted_Portfolio / Total_Credit_Capital) * 100, 2) AS Defaulted_Portfolio_Percentage -- Share of unpaid loans
-FROM Portfolia_data;
+FROM Portfolio_data
+ORDER BY Total_Credit_Capital DESC;
 
 -- Key Insights of Age-Bracket Capital Distribution as Follows:
 -- Highest Capital Concentration: Prime Adults (26–49) command the absolute highest volume of total credit capital, making them the bank's primary revenue driver.
@@ -172,6 +165,7 @@ FROM Portfolia_data;
 
 SELECT * FROM view_cleaned_loan_data;
 
+=================================================================================================================================================================================================================
 -- Question 5: Employment Longevity VS Credit Allocation : 
 -- Analyze how loan volumes and average loan amounts change relative to a 
 -- borrower's years of employment experience.
@@ -210,7 +204,7 @@ ORDER BY
 -- Trust-Based Loan Scaling: As work experience increases, average loan amounts increase because the bank trusts their higher, established income.
 -- Retirement Drop-Off: At late-career stages (around 46 years of experience), loan volumes and sizes drop sharply because borrowers approach retirement age.
 
-
+=================================================================================================================================================================================================================
 -- Question 6: Loan Intent & Purpose Evaluation: 
 -- Segment the data by the underlying reason for the loan (e.g., Venture, Medical, Education, Home Improvement) 
 -- to find the average funding size and interest rate for each category.
@@ -227,28 +221,28 @@ ORDER BY AVG_Funding_Size DESC;
 -- Premium Capital Allocations: Home Improvement loans command both the highest average funding size and the highest average interest rate, representing the most expensive and capital-heavy category for the bank.
 -- High-Risk Risk Pricing: Medical loans exhibit the lowest average funding size but carry the second-highest average interest rate, showing that the bank prices medical credit with tight exposure limits but higher risk premiums.
 
+=================================================================================================================================================================================================================
 -- Question 7: The Leverage Ratio Tiering (LTI): 
 -- Calculate each borrower's Loan-to-Income ratio. 
 -- Group them into leverage risk tiers (Low, Medium, High, Critical) to find out how 
 -- much capital is sitting in high-leverage positions.
 
-
 -- Test query to inspect individual loan-to-income ratios
 SELECT person_income, loan_amnt, loan_intent,
-ROUND((loan_amnt/person_income) , 2) AS Leverage_Ratio_Tiering
+ROUND((loan_amnt/NULLIF(person_income, 0)) , 2) AS Leverage_Ratio_Tiering
 FROM view_cleaned_loan_data
 ORDER BY Leverage_Ratio_Tiering DESC;
  
 -- Test query to find the maximum loan-to-income ratio per loan purpose
 SELECT loan_intent,
-ROUND(MAX(loan_amnt/person_income) , 2) AS Total_Leverage_Ratio_Tiering
+ROUND(MAX(loan_amnt/NULLIF(person_income, 0)) , 2) AS Total_Leverage_Ratio_Tiering
 FROM view_cleaned_loan_data
 GROUP BY loan_intent;
 
 -- Intermediate analysis: Breakdown by loan purpose and leverage risk tier
 WITH LTI_DATA AS (
 SELECT  Loan_intent,
-       SUM(loan_amnt) AS Total_Loan_Amonut,
+       SUM(loan_amnt) AS Total_Loan_Amount,
 (CASE 
       WHEN person_income IS NULL OR person_income = 0 THEN 'Missing/Invalid Income'
       WHEN ROUND((loan_amnt/person_income) , 2) BETWEEN 0.00 AND 0.15 THEN 'Low LRT'
@@ -258,17 +252,16 @@ SELECT  Loan_intent,
 END ) AS Leverage_Ratio_Tiering
 FROM view_cleaned_loan_data
 GROUP BY Leverage_Ratio_Tiering, loan_intent
-ORDER BY Leverage_Ratio_Tiering DESC
 )
-SELECT loan_intent, Leverage_Ratio_Tiering, Total_Loan_Amonut,
-ROUND(( Total_Loan_Amonut / SUM(Total_Loan_Amonut) OVER() ) * 100, 2) AS Pct_Of_Total_Bank_Portfolio
+SELECT loan_intent, Leverage_Ratio_Tiering, Total_Loan_Amount,
+ROUND(( Total_Loan_Amount / SUM(Total_Loan_Amount) OVER() ) * 100, 2) AS Pct_Of_Total_Bank_Portfolio
 FROM LTI_Data
-ORDER BY Leverage_Ratio_Tiering, loan_intent ASC, Total_Loan_Amonut DESC ;
+ORDER BY Leverage_Ratio_Tiering, loan_intent ASC, Total_Loan_Amount DESC ;
  
 -- The Answer: Final aggregate portfolio concentration by leverage risk tier
 WITH LTI_DATA AS (
 SELECT  
-       SUM(loan_amnt) AS Total_Loan_Amonut,
+       SUM(loan_amnt) AS Total_Loan_Amount,
 (CASE 
       WHEN loan_amnt IS NULL OR loan_amnt = 0 THEN 'Missing/Invalid Loan Amount'
       WHEN person_income IS NULL OR person_income = 0 THEN 'Missing/Invalid Income'
@@ -279,19 +272,18 @@ SELECT
 END ) AS Leverage_Ratio_Tiering
 FROM view_cleaned_loan_data
 GROUP BY Leverage_Ratio_Tiering
-ORDER BY Leverage_Ratio_Tiering DESC
 )
-SELECT  Leverage_Ratio_Tiering, Total_Loan_Amonut,
-ROUND(( Total_Loan_Amonut / SUM(Total_Loan_Amonut) OVER() ) * 100, 2) AS Pct_Of_Total_Bank_Portfolio
+SELECT  Leverage_Ratio_Tiering, Total_Loan_Amount,
+ROUND(( Total_Loan_Amount / SUM(Total_Loan_Amount) OVER() ) * 100, 2) AS Pct_Of_Total_Bank_Portfolio
 FROM LTI_Data
-ORDER BY  Total_Loan_Amonut DESC ;
+ORDER BY Total_Loan_Amount DESC ;
 
 -- Key Insights: The Leverage Ratio Tiering (LTI)
 -- Portfolio Capital Density: The vast majority of the bank's total deployed capital is concentrated within the Moderate and High LRT tiers, showing that the loan book leans heavily toward leveraged accounts.
 -- Critical Exposure Vector: The Critical LRT segment represents a significant vulnerability, pinpointing exactly how much capital has been issued to borrowers whose loan amounts dwarf their annual income.
 -- Risk Mitigation Target: Segmenting this by Loan Intent highlights which specific loan products (like Debt Consolidation or Medical) are pushing borrowers into dangerous high-leverage positions.
 
-
+=================================================================================================================================================================================================================
 -- Question 8: Interest Rate vs. Risk Tier Alignment:
 -- Analyze whether the historical interest rates assigned to high-leverage or high-risk 
 -- categories are high enough to justify the risk, or if pricing is misaligned.
@@ -312,19 +304,19 @@ loan_int_rate
 FROM view_cleaned_loan_data
 )
 SELECT  Leverage_Ratio_Tiering, 
-        SUM(loan_amnt) AS Total_Loan_Amonut, -- Total money lent out per tier
+        SUM(loan_amnt) AS Total_Loan_Amount, -- Total money lent out per tier
         ROUND(AVG(loan_int_rate), 2) AS Average_Interest_Rate, -- Average interest rate charged per tier
-        ROUND(( SUM(loan_Amnt) / SUM(SUM(Loan_Amnt)) OVER() ) * 100, 2) AS Percentage_Of_Total_Bank_Portfolio -- Share of total bank capital
+        ROUND(( SUM(loan_amnt) / SUM(SUM(loan_amnt)) OVER() ) * 100, 2) AS Percentage_Of_Total_Bank_Portfolio -- Share of total bank capital
 FROM LTI_Data
 GROUP BY Leverage_Ratio_Tiering 
-ORDER BY Total_Loan_Amonut DESC;
+ORDER BY Total_Loan_Amount DESC;
 
 -- Key Insights: Interest Rate vs Risk Tier Alignment
 -- Risk-Pricing Alignment: The average interest rate scales upward across Low, Moderate, and High LRT tiers, confirming that the underwriting logic successfully charges higher premiums for taking on more leverage risk.
 -- The Critical Premium Deficit: If the Critical LRT average interest rate does not show a significant protective jump compared to the High LRT tier, it exposes a structural pricing misalignment where the bank is under-pricing extreme tail risk.
 -- Capital vs. Yield Optimization: Comparing the Percentage of Total Bank Portfolio against the Average Interest Rate pinpoints exactly which leverage group generates the highest yield relative to the capital assets deployed.
 
-
+=================================================================================================================================================================================================================
 -- Question 9: Income Stream Concentration Analysis:
 -- Evaluate the total outstanding loan exposure across different borrower income brackets 
 -- to identify if the portfolio is overly dependent on low- or middle-income segments.
@@ -350,6 +342,7 @@ GROUP BY Income_Segment;
 -- Macroeconomic Vulnerability: A heavy concentration in the Low Income tier exposes the bank to high systemic risk, as these borrowers are the most vulnerable to economic downturns, inflation, and job loss.
 -- Premium Market Capture: The total capital volume sitting in the High Income tier reveals whether the bank is successfully acquiring low-risk, affluent clients to balance out its riskier segments.
 
+=================================================================================================================================================================================================================
 -- Question 10: High-Exposure Concentration Ranking: 
 -- Use SQL Window Functions (DENSE_RANK()) to identify and 
 -- rank the top 10 highest-exposure borrowers within each specific loan intent category.
@@ -362,23 +355,24 @@ SELECT loan_intent,
        DENSE_RANK() OVER( 
            PARTITION BY loan_intent 
            ORDER BY loan_amnt DESC 
-       ) AS Loan_intent_Rankes
+       ) AS Loan_intent_Ranks
 FROM view_cleaned_loan_data
 )
 -- Select top 10 ranks and count how many borrowers are tied at each amount
 SELECT loan_intent, 
        loan_amnt, 
-       Loan_intent_Rankes,
+       Loan_intent_Ranks,
        COUNT(*) AS Total_Borrowers -- Number of borrowers clustered at this loan size
 FROM Ranked_Loans
-WHERE Loan_intent_Rankes <= 10 
-GROUP BY loan_intent, loan_amnt, Loan_intent_Rankes
-ORDER BY loan_intent, Loan_intent_Rankes;
+WHERE Loan_intent_Ranks <= 10 
+GROUP BY loan_intent, loan_amnt, Loan_intent_Ranks
+ORDER BY loan_intent, Loan_intent_Ranks;
 
 -- Key Insights: High-Exposure Concentration Ranking
 -- Underwriting Policy Ceiling: The window analysis reveals a strict policy cap across almost all categories—the highest loan amount (Rank 1) is universally fixed at exactly $35,000.
 -- High-Density Tied Tiers: Rank 1 does not hold a single borrower; instead, it contains a massive cluster of separate borrowers all tied exactly at the $35,000 limit, particularly in Debt Consolidation and Medical categories.
 -- Portfolio Concentration Risk: This heavy clustering at the absolute maximum limit exposes the bank to systemic boundary risk, showing that capital is heavily bunched together right at the underwriting ceiling.
- 
+
+================================================================================================================================================================================================================= 
 
 
